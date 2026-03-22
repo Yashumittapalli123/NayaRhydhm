@@ -13,6 +13,7 @@ app.use(cors());
 app.use(express.json());
 
 const youtubeDl = require('yt-dlp-exec');
+const ytSearch = require('yt-search');
 
 function ytdlp(args) {
   // Map our old function signature to the library
@@ -37,19 +38,14 @@ app.get('/api/search', async (req, res) => {
   const { q } = req.query;
   if (!q) return res.status(400).json({ error: 'Missing query' });
   try {
-    const raw = await ytdlp(['--dump-json', '--flat-playlist', `ytsearch6:${q}`]);
-    const songs = raw.trim().split('\n').filter(Boolean).map(line => {
-      try {
-        const d = JSON.parse(line);
-        return {
-          id: d.id,
-          title: d.title,
-          url: `https://www.youtube.com/watch?v=${d.id}`,
-          duration: d.duration || 0,
-          thumbnail: d.thumbnail || `https://i.ytimg.com/vi/${d.id}/hqdefault.jpg`,
-        };
-      } catch { return null; }
-    }).filter(Boolean);
+    const r = await ytSearch(q);
+    const songs = r.videos.slice(0, 8).map(v => ({
+      id: v.videoId,
+      title: v.title,
+      url: v.url,
+      duration: v.seconds || 0,
+      thumbnail: v.thumbnail || v.image,
+    }));
     res.json(songs);
   } catch (err) {
     res.status(500).json({ error: err.message });
