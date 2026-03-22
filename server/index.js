@@ -12,17 +12,24 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+const youtubeDl = require('yt-dlp-exec');
+
 function ytdlp(args) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('python', ['-m', 'yt_dlp', ...args]);
-    let stdout = '', stderr = '';
-    proc.stdout.on('data', d => stdout += d);
-    proc.stderr.on('data', d => stderr += d);
-    proc.on('close', code => {
-      if (code === 0) resolve(stdout);
-      else reject(new Error(stderr.slice(-400)));
-    });
-  });
+  // Map our old function signature to the library
+  const url = args.pop(); 
+  const options = {};
+  
+  // Convert array flags to object options
+  if (args.includes('--dump-json')) options.dumpSingleJson = true;
+  if (args.includes('--flat-playlist')) options.flatPlaylist = true;
+  if (args.includes('--no-playlist')) options.noPlaylist = true;
+  if (args.includes('-f')) {
+    const idx = args.indexOf('-f');
+    options.format = args[idx + 1];
+  }
+  if (args.includes('--get-url')) options.getUrl = true;
+
+  return youtubeDl(url, options);
 }
 
 // Search YouTube
