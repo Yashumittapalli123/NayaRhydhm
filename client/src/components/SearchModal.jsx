@@ -25,7 +25,7 @@ export default function SearchModal({ onClose }) {
       const res = await fetch(`${apiUrl}/search?q=${encodeURIComponent(query)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Search failed');
-      setResults(data);
+      setResults(Array.isArray(data) ? data : []);
     } catch (e) {
       setError(e.message || 'API not available');
     } finally {
@@ -95,7 +95,7 @@ export default function SearchModal({ onClose }) {
           {error && <div style={{ padding: 20, background: 'rgba(255,101,132,0.1)', borderRadius: 'var(--radius-md)', color: '#ff6584', fontSize: 14, fontWeight: 600 }}>⚠ {error}</div>}
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {results.map((song, i) => (
+            {Array.isArray(results) && results.map((song, i) => (
               <div key={song.id} className="fade-up" style={{
                 display: 'flex', alignItems: 'center', gap: 16,
                 padding: '12px 16px', borderRadius: 'var(--radius-md)',

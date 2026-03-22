@@ -32,7 +32,7 @@ const AIVibeSearch = ({ onClose }) => {
           const res = await fetch(`${apiUrl}/search?q=${encodeURIComponent(title)}`);
           if (res.ok) {
             const results = await res.json();
-            if (results && results.length > 0) return results[0];
+            if (Array.isArray(results) && results.length > 0) return results[0];
           }
           return null;
         });
