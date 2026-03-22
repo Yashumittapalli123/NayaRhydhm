@@ -12,26 +12,8 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-const youtubeDl = require('yt-dlp-exec');
 const ytSearch = require('yt-search');
-
-function ytdlp(args) {
-  // Map our old function signature to the library
-  const url = args.pop(); 
-  const options = {};
-  
-  // Convert array flags to object options
-  if (args.includes('--dump-json')) options.dumpSingleJson = true;
-  if (args.includes('--flat-playlist')) options.flatPlaylist = true;
-  if (args.includes('--no-playlist')) options.noPlaylist = true;
-  if (args.includes('-f')) {
-    const idx = args.indexOf('-f');
-    options.format = args[idx + 1];
-  }
-  if (args.includes('--get-url')) options.getUrl = true;
-
-  return youtubeDl(url, options);
-}
+const playdl = require('play-dl');
 
 // Search YouTube
 app.get('/api/search', async (req, res) => {
@@ -57,14 +39,14 @@ app.get('/api/metadata', async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'Missing url' });
   try {
-    const raw = await ytdlp(['--dump-json', '--no-playlist', url]);
-    const d = JSON.parse(raw);
+    const info = await playdl.video_info(url);
+    const d = info.video_details;
     res.json({
       id: d.id,
       title: d.title,
       url,
-      duration: d.duration || 0,
-      thumbnail: d.thumbnail || `https://i.ytimg.com/vi/${d.id}/hqdefault.jpg`,
+      duration: d.durationInSec || 0,
+      thumbnail: d.thumbnails[0]?.url || `https://i.ytimg.com/vi/${d.id}/hqdefault.jpg`,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -72,76 +54,32 @@ app.get('/api/metadata', async (req, res) => {
 });
 
 // Get streamable audio URL and proxy it
-app.get('/api/stream', (req, res) => {
+app.get('/api/stream', async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'Missing url' });
   
-  // Run ytdlp async without await
-  ytdlp([
-    '-f', 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio',
-    '--get-url',
-    '--no-playlist',
-    url
-  ])
-    .then(audioUrl => {
-      const cleanUrl = audioUrl.trim().split('\n')[0];
-      if (!cleanUrl) throw new Error('No audio URL found');
-      
-      console.log('[stream] Got URL, starting stream');
-      
-      // Use http/https module for reliable streaming
-      const protocol = cleanUrl.startsWith('https') ? https : http;
-      const options = {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        timeout: 30000
-      };
-      if (req.headers.range) {
-        options.headers.Range = req.headers.range;
-      }
-      
-      const getReq = protocol.get(cleanUrl, options, (audioRes) => {
-        console.log('[stream] Received response:', audioRes.statusCode, audioRes.headers['content-type']);
-        
-        if (audioRes.statusCode !== 200 && audioRes.statusCode !== 206) {
-          res.status(502).json({ error: `YouTube returned ${audioRes.statusCode}` });
-          return;
-        }
-        
-        const headers = {
-          'Content-Type': audioRes.headers['content-type'] || 'audio/mp4',
-          'Access-Control-Allow-Origin': '*',
-          'Accept-Ranges': 'bytes',
-          'Cache-Control': 'no-cache'
-        };
-        
-        if (audioRes.headers['content-length']) headers['Content-Length'] = audioRes.headers['content-length'];
-        if (audioRes.headers['content-range']) headers['Content-Range'] = audioRes.headers['content-range'];
-        
-        res.writeHead(audioRes.statusCode, headers);
-        
-        audioRes.pipe(res);
-        audioRes.on('error', (err) => {
-          console.error('[stream read error]', err.message);
-          res.end();
-        });
-      });
-      
-      getReq.on('error', (err) => {
-        console.error('[stream request error]', err.message);
-        if (!res.headersSent) {
-          res.status(502).json({ error: 'Failed to fetch audio from YouTube' });
-        }
-      });
-      
-      getReq.setTimeout(30000, () => {
-        console.error('[stream timeout]');
-        getReq.destroy();
-      });
-    })
-    .catch(err => {
-      console.error('[stream ytdlp error]', err.message);
-      res.status(500).json({ error: err.message });
+  try {
+    console.log(`[stream] Resolving audio for: ${url}`);
+    const stream = await playdl.stream(url, { quality: 1 }); // quality 1 is bestaudio
+    
+    const headers = {
+      'Content-Type': 'audio/mpeg',
+      'Access-Control-Allow-Origin': '*',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'no-cache'
+    };
+
+    res.writeHead(200, headers);
+    stream.stream.pipe(res);
+
+    stream.stream.on('error', (err) => {
+      console.error('[stream error]', err.message);
+      res.end();
     });
+  } catch (err) {
+    console.error('[stream play-dl error]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get AI Vibe suggestions
