@@ -110,8 +110,11 @@ app.get('/api/stream', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('[stream-global-error]', err.message);
-    res.status(500).json({ error: 'The YouTube engine is currently being throttled. Please try again in a few minutes.' });
+    res.status(500).json({ 
+      error: 'Backend session failed', 
+      details: err.message,
+      tip: 'This is usually caused by YouTube bot detection on shared hosting IP addresses. Please try again or redeploy for a new session.'
+    });
   }
 });
 
