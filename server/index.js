@@ -14,6 +14,7 @@ app.use(express.json());
 
 const ytSearch = require('yt-search');
 const playdl = require('play-dl');
+const ytdl = require('@distube/ytdl-core');
 
 // Search YouTube
 app.get('/api/search', async (req, res) => {
@@ -59,25 +60,38 @@ app.get('/api/stream', async (req, res) => {
   if (!url) return res.status(400).json({ error: 'Missing url' });
   
   try {
-    console.log(`[stream] Resolving audio for: ${url}`);
-    const stream = await playdl.stream(url, { quality: 1 }); // quality 1 is bestaudio
+    console.log(`[stream] Optimizing playback for: ${url}`);
     
-    const headers = {
-      'Content-Type': 'audio/mpeg',
-      'Access-Control-Allow-Origin': '*',
-      'Accept-Ranges': 'bytes',
-      'Cache-Control': 'no-cache'
-    };
+    // Using @distube/ytdl-core for robust bot bypass
+    const stream = ytdl(url, {
+      filter: 'audioonly',
+      quality: 'highestaudio',
+      highWaterMark: 1 << 25,
+      requestOptions: {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': '*/*',
+          'Accept-Language': 'en-US,en;q=0.9'
+        }
+      }
+    });
 
-    res.writeHead(200, headers);
-    stream.stream.pipe(res);
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Transfer-Encoding', 'chunked');
 
-    stream.stream.on('error', (err) => {
-      console.error('[stream error]', err.message);
-      res.end();
+    stream.pipe(res);
+
+    stream.on('error', (err) => {
+      console.error('[stream-error]', err.message);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Streaming currently restricted by YouTube. Please try another track.' });
+      } else {
+        res.end();
+      }
     });
   } catch (err) {
-    console.error('[stream play-dl error]', err.message);
+    console.error('[stream-global-error]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
