@@ -61,8 +61,11 @@ app.get('/api/stream', async (req, res) => {
 
     } catch (e) {
       // ENGINE 2: Cloud Fallback (Best for Render/Vercel)
-      console.warn('[stream] Native Engine unavailable, falling back to Cloud Engine...');
-      const stream = await playdl.stream(decodedUrl, { quality: 1 });
+      console.warn('[stream] Native Engine unavailable, falling back to Id-based Cloud Engine...');
+      let videoId = decodedUrl.split('v=')[1]?.split('&')[0] || decodedUrl.split('/').pop();
+      if (videoId?.includes('watch?')) videoId = videoId.split('v=')[1]?.split('&')[0];
+      
+      const stream = await playdl.stream(`https://www.youtube.com/watch?v=${videoId}`, { quality: 1 });
       stream.stream.pipe(res);
     }
 
