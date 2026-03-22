@@ -51,7 +51,9 @@ export function usePlayer() {
     
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const isRender = window.location.hostname.endsWith('onrender.com');
-    const apiUrl = (isLocal || isRender) ? '/api' : (import.meta.env.VITE_API_URL || '/api');
+    // Favor absolute URL from env if provided; otherwise use local/render relative path
+    const envUrl = import.meta.env.VITE_API_URL;
+    const apiUrl = (envUrl?.startsWith('http')) ? envUrl : ((isLocal || isRender) ? '/api' : (envUrl || '/api'));
     const streamUrl = `${apiUrl}/stream?url=${encodeURIComponent(currentSong.url)}`;
     
     addToRecent(currentSong);

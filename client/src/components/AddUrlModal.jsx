@@ -17,7 +17,8 @@ export default function AddUrlModal({ onClose }) {
     try {
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       const isRender = window.location.hostname.endsWith('onrender.com');
-      const apiUrl = (isLocal || isRender) ? '/api' : (import.meta.env.VITE_API_URL || '/api');
+      const envUrl = import.meta.env.VITE_API_URL;
+      const apiUrl = (envUrl?.startsWith('http')) ? envUrl : ((isLocal || isRender) ? '/api' : (envUrl || '/api'));
       
       const res = await fetch(`${apiUrl}/metadata?url=${encodeURIComponent(trimmed)}`);
       const text = await res.text();

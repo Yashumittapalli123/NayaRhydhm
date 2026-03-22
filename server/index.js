@@ -42,30 +42,34 @@ app.get('/api/stream', async (req, res) => {
   
   try {
     const decodedUrl = decodeURIComponent(url);
-    console.log(`[stream] Native resolution for: ${decodedUrl}`);
+    console.log(`[stream] Optimizing resolution for: ${decodedUrl}`);
     
-    // Using yt-dlp for absolute stability on Windows/Localhost
-    const stream = ytDlp.exec(decodedUrl, {
-      output: '-',
-      format: 'bestaudio',
-      limitRate: '1M',
-    }, { stdio: ['ignore', 'pipe', 'ignore'] });
-
+    // Set mandatory headers early for immediate buffering
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Transfer-Encoding', 'chunked');
 
-    stream.stdout.pipe(res);
+    try {
+      // ENGINE 1: Native Binary (Best for Local Windows)
+      console.log('[stream] Attempting Native Engine...');
+      const stream = ytDlp.exec(decodedUrl, {
+        output: '-', format: 'bestaudio', limitRate: '1M',
+      }, { stdio: ['ignore', 'pipe', 'ignore'] });
+      
+      stream.stdout.pipe(res);
+      stream.on('error', (e) => { throw e; });
 
-    stream.on('error', (err) => {
-      console.error('[stream-error]', err.message);
-      if (!res.headersSent) res.status(500).json({ error: 'Playback restricted' });
-      else res.end();
-    });
+    } catch (e) {
+      // ENGINE 2: Cloud Fallback (Best for Render/Vercel)
+      console.warn('[stream] Native Engine unavailable, falling back to Cloud Engine...');
+      const stream = await playdl.stream(decodedUrl, { quality: 1 });
+      stream.stream.pipe(res);
+    }
 
   } catch (err) {
     console.error('[stream-global-error]', err.message);
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: 'Playback could not start' });
+    else res.end();
   }
 });
 
