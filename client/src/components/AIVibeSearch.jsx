@@ -24,15 +24,20 @@ const AIVibeSearch = ({ onClose }) => {
     }
 
     if (titles && titles.length > 0) {
-      const apiUrl = import.meta.env.VITE_API_URL || '/api';
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const isRender = window.location.hostname.endsWith('onrender.com');
+      const apiUrl = (isLocal || isRender) ? '/api' : (import.meta.env.VITE_API_URL || '/api');
       setStatus(`Curating ${titles.length} tracks...`);
 
       try {
         const resolutionPromises = titles.map(async (title) => {
           const res = await fetch(`${apiUrl}/search?q=${encodeURIComponent(title)}`);
           if (res.ok) {
-            const results = await res.json();
-            if (Array.isArray(results) && results.length > 0) return results[0];
+            const text = await res.text();
+            try {
+              const results = JSON.parse(text);
+              if (Array.isArray(results) && results.length > 0) return results[0];
+            } catch (e) { console.warn('Search parse fail', title); }
           }
           return null;
         });

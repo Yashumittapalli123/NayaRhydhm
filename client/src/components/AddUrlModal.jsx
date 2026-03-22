@@ -15,9 +15,15 @@ export default function AddUrlModal({ onClose }) {
     if (!trimmed) return;
     setLoading(true); setError('');
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || '/api';
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const isRender = window.location.hostname.endsWith('onrender.com');
+      const apiUrl = (isLocal || isRender) ? '/api' : (import.meta.env.VITE_API_URL || '/api');
+      
       const res = await fetch(`${apiUrl}/metadata?url=${encodeURIComponent(trimmed)}`);
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch(e) { throw new Error('Server returned invalid data'); }
+
       if (!res.ok) throw new Error(data.error || 'Failed to fetch metadata');
       addSong(data);
       setUrl('');

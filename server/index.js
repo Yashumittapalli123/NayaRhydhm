@@ -14,41 +14,22 @@ app.use(express.json());
 
 const ytSearch = require('yt-search');
 const playdl = require('play-dl');
-const ytdl = require('@distube/ytdl-core');
+const ytDlp = require('yt-dlp-exec');
 
 // Search YouTube
 app.get('/api/search', async (req, res) => {
   const { q } = req.query;
   if (!q) return res.status(400).json({ error: 'Missing query' });
   try {
-    const r = await ytSearch(q);
-    const songs = r.videos.slice(0, 8).map(v => ({
-      id: v.videoId,
+    const results = await playdl.search(q, { limit: 8, source: { youtube: 'video' } });
+    const songs = results.map(v => ({
+      id: v.id,
       title: v.title,
       url: v.url,
-      duration: v.seconds || 0,
-      thumbnail: v.thumbnail || v.image,
+      duration: v.durationInSec || 0,
+      thumbnail: v.thumbnails[0]?.url || `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`,
     }));
     res.json(songs);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Fetch metadata for a URL
-app.get('/api/metadata', async (req, res) => {
-  const { url } = req.query;
-  if (!url) return res.status(400).json({ error: 'Missing url' });
-  try {
-    const info = await playdl.video_info(url);
-    const d = info.video_details;
-    res.json({
-      id: d.id,
-      title: d.title,
-      url,
-      duration: d.durationInSec || 0,
-      thumbnail: d.thumbnails[0]?.url || `https://i.ytimg.com/vi/${d.id}/hqdefault.jpg`,
-    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -60,61 +41,31 @@ app.get('/api/stream', async (req, res) => {
   if (!url) return res.status(400).json({ error: 'Missing url' });
   
   try {
-    console.log(`[stream] Optimizing session for: ${url}`);
+    const decodedUrl = decodeURIComponent(url);
+    console.log(`[stream] Native resolution for: ${decodedUrl}`);
     
-    // Warming up the session with getInfo significantly improves bot-bypass
-    const info = await ytdl.getInfo(url, {
-      requestOptions: {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-          'Accept': '*/*',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Referer': 'https://www.youtube.com/',
-          'Origin': 'https://www.youtube.com/'
-        }
-      }
-    });
+    // Using yt-dlp for absolute stability on Windows/Localhost
+    const stream = ytDlp.exec(decodedUrl, {
+      output: '-',
+      format: 'bestaudio',
+      limitRate: '1M',
+    }, { stdio: ['ignore', 'pipe', 'ignore'] });
 
-    const format = ytdl.chooseFormat(info.formats, { 
-      filter: f => f.hasAudio && !f.hasVideo && (f.container === 'mp4' || f.container === 'm4a' || f.container === 'webm'),
-      quality: 'highestaudio' 
-    });
-
-    if (!format) {
-      throw new Error('No suitable audio format found for this track.');
-    }
-
-    const stream = ytdl.downloadFromInfo(info, {
-      format: format,
-      highWaterMark: 1 << 25,
-      dlChunkSize: 1024 * 1024 // 1MB chunks
-    });
-
-    res.setHeader('Content-Type', format.container === 'webm' ? 'audio/webm' : 'audio/mpeg');
+    res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Accept-Ranges', 'bytes');
-    if (format.contentLength) {
-      res.setHeader('Content-Length', format.contentLength);
-    }
-    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Transfer-Encoding', 'chunked');
 
-    stream.pipe(res);
+    stream.stdout.pipe(res);
 
     stream.on('error', (err) => {
       console.error('[stream-error]', err.message);
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'YouTube blocked our stream. Trying another format...' });
-      } else {
-        res.end();
-      }
+      if (!res.headersSent) res.status(500).json({ error: 'Playback restricted' });
+      else res.end();
     });
 
   } catch (err) {
-    res.status(500).json({ 
-      error: 'Backend session failed', 
-      details: err.message,
-      tip: 'This is usually caused by YouTube bot detection on shared hosting IP addresses. Please try again or redeploy for a new session.'
-    });
+    console.error('[stream-global-error]', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

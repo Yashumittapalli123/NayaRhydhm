@@ -49,7 +49,9 @@ export function usePlayer() {
     setLoading(true);
     setError('');
     
-    const apiUrl = import.meta.env.VITE_API_URL || '/api';
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const isRender = window.location.hostname.endsWith('onrender.com');
+    const apiUrl = (isLocal || isRender) ? '/api' : (import.meta.env.VITE_API_URL || '/api');
     const streamUrl = `${apiUrl}/stream?url=${encodeURIComponent(currentSong.url)}`;
     
     addToRecent(currentSong);
