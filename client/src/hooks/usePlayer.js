@@ -53,6 +53,7 @@ export function usePlayer() {
     const streamUrl = `${apiUrl}/stream?url=${encodeURIComponent(currentSong.url)}`;
     
     addToRecent(currentSong);
+    audio.pause();
     audio.src = streamUrl;
     audio.volume = volume;
     audio.load();

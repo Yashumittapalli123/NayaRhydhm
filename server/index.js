@@ -60,39 +60,50 @@ app.get('/api/stream', async (req, res) => {
   if (!url) return res.status(400).json({ error: 'Missing url' });
   
   try {
-    console.log(`[stream] Optimizing playback for: ${url}`);
+    console.log(`[stream] Optimizing session for: ${url}`);
     
-    // Using @distube/ytdl-core for robust bot bypass
-    const stream = ytdl(url, {
-      filter: 'audioonly',
-      quality: 'highestaudio',
-      highWaterMark: 1 << 25,
+    // Warming up the session with getInfo significantly improves bot-bypass
+    const info = await ytdl.getInfo(url, {
       requestOptions: {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
           'Accept': '*/*',
-          'Accept-Language': 'en-US,en;q=0.9'
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://www.youtube.com/',
+          'Origin': 'https://www.youtube.com/'
         }
       }
     });
 
+    const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio' });
+    const stream = ytdl.downloadFromInfo(info, {
+      format: format,
+      highWaterMark: 1 << 25,
+      dlChunkSize: 1024 * 1024 // 1MB chunks
+    });
+
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Transfer-Encoding', 'chunked');
+    res.setHeader('Accept-Ranges', 'bytes');
+    if (format.contentLength) {
+      res.setHeader('Content-Length', format.contentLength);
+    }
+    res.setHeader('Connection', 'keep-alive');
 
     stream.pipe(res);
 
     stream.on('error', (err) => {
       console.error('[stream-error]', err.message);
       if (!res.headersSent) {
-        res.status(500).json({ error: 'Streaming currently restricted by YouTube. Please try another track.' });
+        res.status(500).json({ error: 'YouTube blocked our stream. Trying another format...' });
       } else {
         res.end();
       }
     });
+
   } catch (err) {
     console.error('[stream-global-error]', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'The YouTube engine is currently being throttled. Please try again in a few minutes.' });
   }
 });
 
