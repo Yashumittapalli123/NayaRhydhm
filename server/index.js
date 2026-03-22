@@ -75,14 +75,22 @@ app.get('/api/stream', async (req, res) => {
       }
     });
 
-    const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio' });
+    const format = ytdl.chooseFormat(info.formats, { 
+      filter: f => f.hasAudio && !f.hasVideo && (f.container === 'mp4' || f.container === 'm4a' || f.container === 'webm'),
+      quality: 'highestaudio' 
+    });
+
+    if (!format) {
+      throw new Error('No suitable audio format found for this track.');
+    }
+
     const stream = ytdl.downloadFromInfo(info, {
       format: format,
       highWaterMark: 1 << 25,
       dlChunkSize: 1024 * 1024 // 1MB chunks
     });
 
-    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Type', format.container === 'webm' ? 'audio/webm' : 'audio/mpeg');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Accept-Ranges', 'bytes');
     if (format.contentLength) {
