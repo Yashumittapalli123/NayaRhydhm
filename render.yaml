@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: naya-rhydhm-client
+    root: client
+    buildCommand: npm ci && npm run build
+    startCommand: npm run preview
+    envVars:
+      - key: VITE_API_URL
+        value: http://localhost:5000/api
