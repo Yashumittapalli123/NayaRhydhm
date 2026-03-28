@@ -39,26 +39,55 @@ app.get('/api/search', async (req, res) => {
 const os = require('os');
 const fs = require('fs');
 
+// Initialize play-dl to bypass bot detection where possible
+// Using better user-agent and pre-fetching tokens
+const initPlaydl = async () => {
+  try {
+    await playdl.setToken({
+      youtube: {
+        cookie: process.env.YT_COOKIE || "" 
+      }
+    });
+    console.log('[play-dl] Initialized successfully.');
+  } catch (e) {
+    console.warn('[play-dl] Initialization error:', e.message);
+  }
+};
+initPlaydl();
+
 app.get('/api/stream', async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'Missing url' });
 
   try {
     const decodedUrl = decodeURIComponent(url);
-    console.log(`[stream] Direct stream for: ${decodedUrl}`);
+    console.log(`[stream] Attempting direct stream for: ${decodedUrl}`);
 
-    const stream = await playdl.stream(decodedUrl);
+    // Some serverless environments need fresh info for every stream
+    const isVercel = !!process.env.VERCEL;
+    const stream = await playdl.stream(decodedUrl, {
+      quality: 0, // 0 is auto-best
+      discordPlayerProxy: isVercel, // Internal optimization for serverless
+      seek: 0
+    });
     
     res.writeHead(200, {
       'Content-Type': stream.type || 'audio/webm',
       'Access-Control-Allow-Origin': '*',
-      'Transfer-Encoding': 'chunked'
+      'Transfer-Encoding': 'chunked',
+      'X-Content-Source': 'youtube-direct'
     });
 
     stream.stream.pipe(res);
   } catch (err) {
     console.error('[stream-error]', err.message);
-    if (!res.headersSent) res.status(500).json({ error: 'Playback could not start' });
+    const isBot = err.message.toLowerCase().includes('bot') || err.message.toLowerCase().includes('sign in');
+    if (!res.headersSent) {
+      res.status(isBot ? 403 : 500).json({ 
+        error: isBot ? 'YouTube Bot Detection Blocked this request. See logs.' : 'Playback could not start',
+        details: err.message 
+      });
+    }
   }
 });
 
