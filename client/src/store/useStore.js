@@ -9,6 +9,7 @@ export const useStore = create(
       currentIndex: -1,
       recentSongs: [], 
       vibeHistory: [], 
+      downloadedSongs: [], 
 
       addSong: (song) => set(state => {
         if (!song) return state;
@@ -77,6 +78,12 @@ export const useStore = create(
       })),
       removeVibeFromHistory: (id) => set(state => ({
         vibeHistory: state.vibeHistory.filter(v => v.id !== id)
+      })),
+      addDownloadedSong: (song) => set(state => ({
+        downloadedSongs: [...state.downloadedSongs.filter(s => s.id !== song.id), song]
+      })),
+      removeDownloadedSong: (id) => set(state => ({
+        downloadedSongs: state.downloadedSongs.filter(s => s.id !== id)
       })),
 
       // ── Player state ──────────────────────────────────────────────────────────
@@ -152,11 +159,11 @@ export const useStore = create(
           if (ovhData.lyrics) {
             set({ lyrics: ovhData.lyrics, lyricsLoading: false });
           } else {
-            set({ lyrics: 'Lyrics not found for this track.', lyricsLoading: false });
+            set({ lyrics: 'Lyrics not available', lyricsLoading: false });
           }
         } catch (e) {
           console.warn('[Store] Lyrics error:', e);
-          set({ lyrics: 'Lyrics service unavailable.', lyricsLoading: false });
+          set({ lyrics: 'Lyrics not available', lyricsLoading: false });
         }
       },
 
@@ -193,6 +200,7 @@ export const useStore = create(
         volume: state.volume,
         shuffle: state.shuffle,
         loop: state.loop,
+        downloadedSongs: state.downloadedSongs,
       }),
     }
   )

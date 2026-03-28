@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../store/useStore';
 import Logo from './Logo';
 import AIVibeSearch from './AIVibeSearch';
+import { saveSong, deleteSong } from '../utils/indexedDB';
 
 function fmt(s) {
   if (!s) return '--:--';
@@ -13,7 +14,8 @@ export default function Sidebar({ onSearch, onAddUrl, onClose }) {
   const { 
     playlist, currentIndex, setCurrentIndex, removeSong, clearPlaylist, 
     vibeHistory, addSong, removeVibeFromHistory, 
-    recentSongs, removeRecentSong 
+    recentSongs, removeRecentSong,
+    downloadedSongs, addDownloadedSong, removeDownloadedSong 
   } = useStore();
   const [hoveredId, setHoveredId] = useState(null);
   const [isAiVibeOpen, setIsAiVibeOpen] = useState(false);
@@ -134,6 +136,57 @@ export default function Sidebar({ onSearch, onAddUrl, onClose }) {
           </div>
         </div>
       )}
+      {/* Offline Library Section */}
+      <div className="glass" style={{ padding: '16px 20px', borderRadius: 'var(--radius-lg)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1px', color: 'var(--accent)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span>💾</span> Offline Library
+        </div>
+        
+        {downloadedSongs.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto', paddingRight: 4 }}>
+            {downloadedSongs.map((song) => (
+              <div 
+                key={song.id}
+                onClick={() => addSong(song)}
+                style={{ 
+                  padding: '8px 10px', background: 'rgba(255,255,255,0.02)', 
+                  border: '1px solid var(--glass-border)', borderRadius: 'var(--radius-sm)',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'var(--accent)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
+              >
+                <img src={song.thumbnail} style={{ width: 28, height: 28, borderRadius: 4, objectFit: 'cover' }} alt="" />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'white' }}>
+                    {song.title}
+                  </div>
+                  <div style={{ fontSize: 9, color: 'var(--accent)', fontWeight: 700 }}>READY OFFLINE</div>
+                </div>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); removeDownloadedSong(song.id); deleteSong(song.id); }}
+                  style={{
+                    background: 'none', border: 'none', color: 'var(--text-muted)',
+                    fontSize: 14, cursor: 'pointer', padding: '4px'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#ff6584'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+                  title="Remove Download"
+                >✕</button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ padding: '12px', textAlign: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--glass-border)' }}>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>
+              No tracks downloaded yet.<br/>
+              Click <span style={{ color: 'var(--accent)', fontWeight: 700 }}>↓</span> on any song to save it!
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Recently Played History */}
       {recentSongs.length > 0 && (
         <div className="glass" style={{ padding: '16px 20px', borderRadius: 'var(--radius-lg)', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -247,19 +300,22 @@ export default function Sidebar({ onSearch, onAddUrl, onClose }) {
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontWeight: 600 }}>{fmt(song.duration)}</div>
                 </div>
 
-                {hoveredId === song.id && (
-                  <button onClick={e => { e.stopPropagation(); removeSong(song.id); }}
-                    style={{
-                      background: 'rgba(255,101,132,0.1)', border: 'none',
-                      color: '#ff6584', cursor: 'pointer',
-                      width: 28, height: 28, borderRadius: '50%',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 18, transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#ff6584'; e.currentTarget.style.color = 'white'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,101,132,0.1)'; e.currentTarget.style.color = '#ff6584'; }}
-                  >×</button>
-                )}
+                <div style={{ display: 'flex', gap: 6, opacity: hoveredId === song.id ? 1 : 0.4 }}>
+                  <DownloadBtn song={song} downloadedSongs={downloadedSongs} addDownloadedSong={addDownloadedSong} removeDownloadedSong={removeDownloadedSong} />
+                  {hoveredId === song.id && (
+                    <button onClick={e => { e.stopPropagation(); removeSong(song.id); }}
+                      style={{
+                        background: 'rgba(255,101,132,0.1)', border: 'none',
+                        color: '#ff6584', cursor: 'pointer',
+                        width: 28, height: 28, borderRadius: '50%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 18, transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#ff6584'; e.currentTarget.style.color = 'white'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,101,132,0.1)'; e.currentTarget.style.color = '#ff6584'; }}
+                    >×</button>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -268,5 +324,60 @@ export default function Sidebar({ onSearch, onAddUrl, onClose }) {
 
       {isAiVibeOpen && <AIVibeSearch onClose={() => setIsAiVibeOpen(false)} />}
     </aside>
+  );
+}
+
+function DownloadBtn({ song, downloadedSongs, addDownloadedSong, removeDownloadedSong }) {
+  const [downloading, setDownloading] = useState(false);
+  const isDownloaded = downloadedSongs.some(s => s.id === song.id);
+
+  const handleDownload = async (e) => {
+    e.stopPropagation();
+    if (isDownloaded) {
+      await deleteSong(song.id);
+      removeDownloadedSong(song.id);
+      return;
+    }
+
+    setDownloading(true);
+    try {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const isRender = window.location.hostname.endsWith('onrender.com');
+      const envUrl = import.meta.env.VITE_API_URL;
+      const apiUrl = (envUrl?.startsWith('http')) ? envUrl : ((isLocal || isRender) ? '/api' : (envUrl || '/api'));
+      const streamUrl = `${apiUrl}/stream?url=${encodeURIComponent(song.url)}`;
+      
+      const res = await fetch(streamUrl);
+      const blob = await res.blob();
+      await saveSong(song.id, blob);
+      addDownloadedSong(song);
+    } catch (err) {
+      console.error('Download failed:', err);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleDownload}
+      disabled={downloading}
+      style={{
+        background: isDownloaded ? 'var(--accent)' : 'rgba(255,255,255,0.05)',
+        border: 'none', color: 'white', cursor: 'pointer',
+        width: 28, height: 28, borderRadius: '50%',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 14, transition: 'all 0.2s',
+      }}
+      title={isDownloaded ? "Remove Offline" : "Download Offline"}
+    >
+      {downloading ? (
+        <div className="spin" style={{ width: 10, height: 10, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%' }} />
+      ) : isDownloaded ? (
+        "✓"
+      ) : (
+        "↓"
+      )}
+    </button>
   );
 }

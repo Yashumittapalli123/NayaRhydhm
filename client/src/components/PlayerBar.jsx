@@ -110,7 +110,8 @@ export default function PlayerBar({ player = {} }) {
         {/* Buttons (Centred) */}
         <div className="player-controls" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <ControlBtn active={shuffle} onClick={toggleShuffle} title="Shuffle" size={14}>⇄</ControlBtn>
-          <ControlBtn onClick={rewind} title="Rewind 10s" size={14}>⏮</ControlBtn>
+          <ControlBtn onClick={prevSong} title="Previous Song" size={14}>⏮</ControlBtn>
+          <ControlBtn onClick={rewind} title="Rewind 10s" size={14}>⏪</ControlBtn>
           
           <button
             onClick={togglePlay}
@@ -134,7 +135,8 @@ export default function PlayerBar({ player = {} }) {
             }
           </button>
 
-          <ControlBtn onClick={fastForward} title="Forward 10s" size={14}>⏭</ControlBtn>
+          <ControlBtn onClick={fastForward} title="Forward 10s" size={14}>⏩</ControlBtn>
+          <ControlBtn onClick={nextSong} title="Next Song" size={14}>⏭</ControlBtn>
           <ControlBtn onClick={() => seek(0)} title="Restart" size={14}>↻</ControlBtn>
         </div>
       </div>

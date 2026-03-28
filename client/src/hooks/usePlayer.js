@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useStore } from '../store/useStore';
+import { getSong } from '../utils/indexedDB';
 
 export function usePlayer() {
   const audioRef = useRef(null);
@@ -46,34 +47,52 @@ export function usePlayer() {
     const audio = audioRef.current;
     if (!currentSong) return;
     
+    let objectUrl = null;
     setLoading(true);
     setError('');
     
-    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const isRender = window.location.hostname.endsWith('onrender.com');
-    // Favor absolute URL from env if provided; otherwise use local/render relative path
-    const envUrl = import.meta.env.VITE_API_URL;
-    const apiUrl = (envUrl?.startsWith('http')) ? envUrl : ((isLocal || isRender) ? '/api' : (envUrl || '/api'));
-    const streamUrl = `${apiUrl}/stream?url=${encodeURIComponent(currentSong.url)}`;
-    
-    addToRecent(currentSong);
-    audio.pause();
-    audio.src = streamUrl;
-    audio.volume = volume;
-    audio.load();
-    
-    audio.play()
-      .then(() => { 
+    const loadAudio = async () => {
+      try {
+        // Check IndexedDB for offline blob
+        const blob = await getSong(currentSong.id);
+        if (blob) {
+          console.log(`[usePlayer] Playing from offline storage: ${currentSong.title}`);
+          objectUrl = URL.createObjectURL(blob);
+          audio.src = objectUrl;
+        } else {
+          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          const isRender = window.location.hostname.endsWith('onrender.com');
+          const envUrl = import.meta.env.VITE_API_URL;
+          const apiUrl = (envUrl?.startsWith('http')) ? envUrl : ((isLocal || isRender) ? '/api' : (envUrl || '/api'));
+          const streamUrl = `${apiUrl}/stream?url=${encodeURIComponent(currentSong.url)}`;
+          audio.src = streamUrl;
+        }
+
+        addToRecent(currentSong);
+        audio.volume = volume;
+        audio.load();
+        
+        await audio.play();
         initAudioContext();
         if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume();
         setIsPlaying(true); 
+        setLoading(false);
+      } catch (e) {
+        // Only set error if it's not an AbortError from a new play request
+        if (e.name !== 'AbortError') {
+          setError(e.message); 
+          setIsPlaying(false);
+        }
         setLoading(false); 
-      })
-      .catch(e => { 
-        setError(e.message); 
-        setLoading(false); 
-        setIsPlaying(false); 
-      });
+      }
+    };
+
+    loadAudio();
+    
+    return () => {
+      audio.pause();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
   }, [currentIndex]);
 
   // Sync volume
@@ -122,10 +141,18 @@ export function usePlayer() {
     if (!currentSong) return;
     
     if (!audio.src || audio.src === window.location.href) {
-      const apiUrl = import.meta.env.VITE_API_URL || '/api';
-      const streamUrl = `${apiUrl}/stream?url=${encodeURIComponent(currentSong.url)}`;
-      audio.src = streamUrl;
-      audio.load();
+      const loadSrc = async () => {
+        const blob = await getSong(currentSong.id);
+        if (blob) {
+          audio.src = URL.createObjectURL(blob);
+        } else {
+          const apiUrl = import.meta.env.VITE_API_URL || '/api';
+          const streamUrl = `${apiUrl}/stream?url=${encodeURIComponent(currentSong.url)}`;
+          audio.src = streamUrl;
+        }
+        audio.load();
+      };
+      loadSrc();
     }
 
     if (audio.paused) {
@@ -138,20 +165,24 @@ export function usePlayer() {
   }, [currentSong]);
 
   const seek = useCallback((s) => {
-    if (audioRef.current) {
-      const target = Math.max(0, Math.min(s, audioRef.current.duration || 9999));
-      audioRef.current.currentTime = target;
-      setPosition(Math.floor(target));
-    }
+    const audio = audioRef.current;
+    if (!audio) return;
+    const dur = audio.duration;
+    if (!dur || !isFinite(dur) || isNaN(dur)) return; // don't seek if duration not ready
+    const target = Math.max(0, Math.min(s, dur));
+    audio.currentTime = target;
+    setPosition(Math.floor(target));
   }, []);
 
   const fastForward = useCallback(() => {
-    if (audioRef.current) seek(audioRef.current.currentTime + 10);
-  }, [seek]);
+    if (audioRef.current) audioRef.current.currentTime += 10;
+  }, []);
 
   const rewind = useCallback(() => {
-    if (audioRef.current) seek(audioRef.current.currentTime - 10);
-  }, [seek]);
+    if (audioRef.current) {
+      audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 10);
+    }
+  }, []);
 
   const stop = useCallback(() => {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }

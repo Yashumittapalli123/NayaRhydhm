@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
+import { saveSong, deleteSong } from '../utils/indexedDB';
 
 function fmt(s) {
   if (!s) return '--:--';
@@ -13,7 +14,7 @@ export default function SearchModal({ onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const inputRef = useRef();
-  const { addSong, playlist } = useStore();
+  const { addSong, playlist, downloadedSongs, addDownloadedSong, removeDownloadedSong } = useStore();
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -117,21 +118,26 @@ export default function SearchModal({ onClose }) {
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.title}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontWeight: 500 }}>{fmt(song.duration)}</div>
                 </div>
-                <button
-                  onClick={() => { addSong(song); }}
-                  disabled={isAdded(song.id)}
-                  style={{
-                    padding: '8px 20px', borderRadius: 'var(--radius-sm)', border: 'none',
-                    background: isAdded(song.id) ? 'var(--glass)' : 'var(--brand-gradient)',
-                    color: isAdded(song.id) ? 'var(--text-muted)' : 'white',
-                    fontWeight: 700, fontSize: 13,
-                    cursor: isAdded(song.id) ? 'default' : 'pointer', flexShrink: 0,
-                    transition: 'all 0.2s',
-                    boxShadow: isAdded(song.id) ? 'none' : '0 4px 10px rgba(108,99,255,0.2)',
-                  }}
-                >
-                  {isAdded(song.id) ? '✓ In Queue' : 'Add to Queue'}
-                </button>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <DownloadBtn song={song} downloadedSongs={downloadedSongs} addDownloadedSong={addDownloadedSong} removeDownloadedSong={removeDownloadedSong} />
+                  
+                  <button
+                    onClick={(e) => { e.stopPropagation(); addSong(song); }}
+                    disabled={isAdded(song.id)}
+                    style={{
+                      padding: '8px 20px', borderRadius: 'var(--radius-sm)', border: 'none',
+                      background: isAdded(song.id) ? 'var(--glass)' : 'var(--brand-gradient)',
+                      color: isAdded(song.id) ? 'var(--text-muted)' : 'white',
+                      fontWeight: 700, fontSize: 13,
+                      cursor: isAdded(song.id) ? 'default' : 'pointer', flexShrink: 0,
+                      transition: 'all 0.2s',
+                      boxShadow: isAdded(song.id) ? 'none' : '0 4px 10px rgba(108,99,255,0.2)',
+                    }}
+                  >
+                    {isAdded(song.id) ? '✓ In Queue' : 'Add to Queue'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -146,5 +152,60 @@ export default function SearchModal({ onClose }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function DownloadBtn({ song, downloadedSongs, addDownloadedSong, removeDownloadedSong }) {
+  const [downloading, setDownloading] = useState(false);
+  const isDownloaded = downloadedSongs.some(s => s.id === song.id);
+
+  const handleDownload = async (e) => {
+    e.stopPropagation();
+    if (isDownloaded) {
+      await deleteSong(song.id);
+      removeDownloadedSong(song.id);
+      return;
+    }
+
+    setDownloading(true);
+    try {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const isRender = window.location.hostname.endsWith('onrender.com');
+      const envUrl = import.meta.env.VITE_API_URL;
+      const apiUrl = (envUrl?.startsWith('http')) ? envUrl : ((isLocal || isRender) ? '/api' : (envUrl || '/api'));
+      const streamUrl = `${apiUrl}/stream?url=${encodeURIComponent(song.url)}`;
+      
+      const res = await fetch(streamUrl);
+      const blob = await res.blob();
+      await saveSong(song.id, blob);
+      addDownloadedSong(song);
+    } catch (err) {
+      console.error('Download failed:', err);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleDownload}
+      disabled={downloading}
+      style={{
+        background: isDownloaded ? 'var(--accent)' : 'rgba(255,255,255,0.05)',
+        border: '1px solid var(--glass-border)', color: 'white', cursor: 'pointer',
+        width: 36, height: 36, borderRadius: '50%',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 18, transition: 'all 0.2s',
+      }}
+      title={isDownloaded ? "Remove Offline" : "Download Offline"}
+    >
+      {downloading ? (
+        <div className="spin" style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%' }} />
+      ) : isDownloaded ? (
+        "✓"
+      ) : (
+        "↓"
+      )}
+    </button>
   );
 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import Visualizer from './Visualizer';
 import LyricsPanel from './LyricsPanel';
+import { saveSong, deleteSong, getSong } from '../utils/indexedDB';
 
 function fmt(secs) {
   if (!secs || isNaN(secs)) return '0:00';
@@ -10,30 +11,88 @@ function fmt(secs) {
 }
 
 // ── Memoized Song Card ──────────────────────────────────────────────────────
-const SongCard = React.memo(({ item, type, index, onSelect, hoveredCard, setHoveredCard }) => (
-  <div
-    onClick={() => onSelect(item, index)}
-    onMouseEnter={() => setHoveredCard(`${type}-${index}`)}
-    onMouseLeave={() => setHoveredCard(null)}
-    className="song-card-glass"
-    style={{
-      animationDelay: `${index * 0.05}s`,
-    }}
-  >
-    <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', overflow: 'hidden', borderRadius: 'var(--radius-sm)' }}>
-      <img src={item.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', userSelect: 'none' }} />
-      {hoveredCard === `${type}-${index}` && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ padding: '8px', background: 'var(--accent)', borderRadius: '50%', color: 'white' }}>▶</div>
-        </div>
-      )}
+const SongCard = React.memo(({ item, type, index, onSelect, hoveredCard, setHoveredCard }) => {
+  const { downloadedSongs, addDownloadedSong, removeDownloadedSong } = useStore();
+  const [downloading, setDownloading] = useState(false);
+  const isDownloaded = downloadedSongs.some(s => s.id === item.id);
+
+  const handleDownload = async (e) => {
+    e.stopPropagation();
+    if (isDownloaded) {
+      await deleteSong(item.id);
+      removeDownloadedSong(item.id);
+      return;
+    }
+
+    setDownloading(true);
+    try {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const isRender = window.location.hostname.endsWith('onrender.com');
+      const envUrl = import.meta.env.VITE_API_URL;
+      const apiUrl = (envUrl?.startsWith('http')) ? envUrl : ((isLocal || isRender) ? '/api' : (envUrl || '/api'));
+      const streamUrl = `${apiUrl}/stream?url=${encodeURIComponent(item.url)}`;
+      
+      const res = await fetch(streamUrl);
+      const blob = await res.blob();
+      await saveSong(item.id, blob);
+      addDownloadedSong(item);
+    } catch (err) {
+      console.error('Download failed:', err);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <div
+      onClick={() => onSelect(item, index)}
+      onMouseEnter={() => setHoveredCard(`${type}-${index}`)}
+      onMouseLeave={() => setHoveredCard(null)}
+      className="song-card-glass"
+      style={{
+        animationDelay: `${index * 0.05}s`,
+      }}
+    >
+      <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', overflow: 'hidden', borderRadius: 'var(--radius-sm)' }}>
+        <img src={item.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', userSelect: 'none' }} />
+        {hoveredCard === `${type}-${index}` && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ padding: '8px', background: 'var(--accent)', borderRadius: '50%', color: 'white' }}>▶</div>
+          </div>
+        )}
+        
+        {/* Download Button Overlay */}
+        <button
+          onClick={handleDownload}
+          disabled={downloading}
+          style={{
+            position: 'absolute', top: 8, right: 8,
+            width: 32, height: 32, borderRadius: '50%',
+            background: isDownloaded ? 'var(--accent)' : 'rgba(0,0,0,0.5)',
+            border: 'none', color: 'white', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 16, transition: 'all 0.2s',
+            zIndex: 10,
+            opacity: (hoveredCard === `${type}-${index}` || isDownloaded || downloading) ? 1 : 0.4
+          }}
+          title={isDownloaded ? "Remove Offline" : "Download Offline"}
+        >
+          {downloading ? (
+            <div className="spin" style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%' }} />
+          ) : isDownloaded ? (
+            "✓"
+          ) : (
+            "↓"
+          )}
+        </button>
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <h4 style={{ fontSize: 13, fontWeight: 700, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0 }}>{item.title}</h4>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontWeight: 600, margin: '4px 0 0' }}>YouTube · {fmt(item.duration)}</p>
+      </div>
     </div>
-    <div style={{ minWidth: 0 }}>
-      <h4 style={{ fontSize: 13, fontWeight: 700, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0 }}>{item.title}</h4>
-      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontWeight: 600, margin: '4px 0 0' }}>YouTube · {fmt(item.duration)}</p>
-    </div>
-  </div>
-));
+  );
+});
 
 // ── Centerpiece Section (Handles high-freq updates) ─────────────────────────
 const Centerpiece = React.memo(({ 
@@ -152,10 +211,10 @@ export default function NowPlaying({ player }) {
   const [hoveredCard, setHoveredCard] = useState(null);
 
   useEffect(() => {
-    if (song && showLyrics) {
+    if (song) {
       fetchLyrics(song.title);
     }
-  }, [song?.id, showLyrics, fetchLyrics]);
+  }, [song?.id, fetchLyrics]);
 
   const onSelectSong = (item, index) => {
     if (playlist.find(s => s.id === item.id)) {

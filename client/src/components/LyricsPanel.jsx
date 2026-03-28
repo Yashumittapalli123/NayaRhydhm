@@ -72,7 +72,7 @@ export default function LyricsPanel({ position = 0, seek = () => {}, song = null
   if (!syncedLyrics) return (
      <div style={{ padding: '100px 20px', color: 'var(--text-muted)', textAlign: 'center' }}>
         <div style={{ fontSize: 44, marginBottom: 16 }}>🚫</div>
-        <div style={{ fontSize: 18, fontWeight: 700, fontFamily: 'var(--font-heading)' }}>LYRICS UNAVAILABLE</div>
+        <div style={{ fontSize: 18, fontWeight: 700, fontFamily: 'var(--font-heading)' }}>LYRICS NOT AVAILABLE</div>
       </div>
   );
 
