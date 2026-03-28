@@ -1,9 +1,17 @@
 services:
   - type: web
-    name: naya-rhydhm-client
-    root: client
-    buildCommand: npm ci && npm run build
-    startCommand: npm run preview
+    name: nayarhydhm-backend
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node index.js
     envVars:
-      - key: VITE_API_URL
-        value: http://localhost:5000/api
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: NVIDIA_API_URL
+        value: https://integrate.api.nvidia.com/v1/chat/completions
