@@ -9,7 +9,21 @@
     "start": "node server/index.js",
     "dev": "concurrently \"cd server && npm start\" \"cd client && npm run dev\""
   },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.3.1",
+    "express": "^4.19.2",
+    "node-fetch": "^3.3.2",
+    "play-dl": "^1.9.7",
+    "yt-dlp-exec": "^1.0.1",
+    "yt-search": "^2.13.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.2"
+  },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.21"
   }
 }
